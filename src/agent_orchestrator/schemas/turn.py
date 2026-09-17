@@ -8,11 +8,17 @@ class ToolCallIn(BaseModel):
 
 
 class MessageIn(BaseModel):
+    """Matches Operator-Portal's existing normalized transcript shape
+    (ChatMessage#to_llm_message / Integrations::Llm::Base#chat's documented `messages:` format)
+    exactly -- `name` identifies which tool a tool-role message answers, not `tool_name`, since
+    that's the key Rails already emits (mirroring the OpenAI wire format's own `role: "tool",
+    name: ...` convention)."""
+
     role: str  # "user" | "assistant" | "tool"
     content: str | None = None
     tool_calls: list[ToolCallIn] = Field(default_factory=list)
     tool_call_id: str | None = None
-    tool_name: str | None = None
+    name: str | None = None
 
 
 class ModelOverrides(BaseModel):

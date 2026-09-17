@@ -14,7 +14,7 @@ def to_langchain_messages(messages: list[MessageIn]) -> list[BaseMessage]:
             tool_calls = [{"id": tc.id, "name": tc.name, "args": tc.arguments} for tc in m.tool_calls]
             result.append(AIMessage(content=m.content or "", tool_calls=tool_calls))
         elif m.role == "tool":
-            result.append(ToolMessage(content=m.content or "", tool_call_id=m.tool_call_id, name=m.tool_name))
+            result.append(ToolMessage(content=m.content or "", tool_call_id=m.tool_call_id, name=m.name))
         else:
             raise ValueError(f"unknown message role: {m.role!r}")
     return result

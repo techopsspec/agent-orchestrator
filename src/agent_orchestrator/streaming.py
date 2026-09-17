@@ -37,6 +37,23 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
+def _tool_result_text(content: object) -> str:
+    """langchain-mcp-adapters' ToolMessage.content is the raw MCP content-part array
+    ([{"type": "text", "text": "...", "id": "..."}, ...]), not just the tool's own result text.
+    Confirmed live: without this, ChatMessage#content (and what the model sees on its next
+    turn) ends up holding that whole wrapper serialized as a string, so the frontend's tool
+    result card parses it as a one-element array instead of the actual {snowfall_report_id:...}
+    object it expects. Every McpTools::* adapter in Operator-Portal returns exactly one text
+    part (MCP::Tool::Response.new([{type: "text", text: result.to_json}])), so unwrapping to
+    that first part's text is correct for every tool this app has today.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list) and content and isinstance(content[0], dict) and "text" in content[0]:
+        return content[0]["text"]
+    return json.dumps(content)
+
+
 async def stream_turn(app_module: ModuleType, request: RunTurnRequest) -> AsyncIterator[str]:
     """Runs one turn and yields already-SSE-formatted strings. Each finalized message (assistant
     or tool) is yielded as its own event the moment the graph produces it -- Rails persists a
@@ -100,13 +117,15 @@ async def stream_turn(app_module: ModuleType, request: RunTurnRequest) -> AsyncI
                             },
                         )
                     elif isinstance(m, ToolMessage):
-                        content = m.content if isinstance(m.content, str) else json.dumps(m.content)
+                        content = _tool_result_text(m.content)
                         yield _sse(
                             "message",
                             {
                                 "role": "tool",
                                 "tool_call_id": m.tool_call_id,
-                                "tool_name": m.name,
+                                # "name", not "tool_name" -- matches Operator-Portal's existing
+                                # normalized transcript wire format (see schemas/turn.py).
+                                "name": m.name,
                                 "content": content,
                             },
                         )
