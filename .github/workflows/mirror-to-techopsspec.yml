@@ -1,0 +1,39 @@
+name: Mirror to techopsspec
+
+on:
+  push:
+    branches:
+      - "**"
+  create: {}
+  delete: {}
+
+# Creating a branch fires `push` and `create` in the same second, and both runs
+# race to force-push the identical ref. Git locks a ref per update, so the loser
+# dies with "cannot lock ref '<branch>': reference already exists" — which is
+# what happened to ies-posted-date-and-daily-ingest on 2026-08-11, while earlier
+# new branches won the race and passed. Serialising per ref makes the second run
+# a no-op force push instead of a failure.
+#
+# Keyed on the ref, not a single global group: GitHub keeps only one *pending*
+# run per group, so a shared group would let a push to one branch displace
+# another branch's queued mirror and leave it un-mirrored. Different refs never
+# contend for the same lock anyway. cancel-in-progress stays false so a push is
+# never interrupted mid-flight.
+concurrency:
+  group: mirror-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Push mirror to techopsspec
+        run: |
+          git remote add mirror "https://x-access-token:${{ secrets.TECHOPSSPEC_MIRROR_PAT }}@github.com/techopsspec/${{ github.event.repository.name }}.git"
+          git push mirror '+refs/heads/*:refs/heads/*' --force
+          git push mirror '+refs/tags/*:refs/tags/*' --force
