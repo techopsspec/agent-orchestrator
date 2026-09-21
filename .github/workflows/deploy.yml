@@ -1,0 +1,19 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, agent-orchestrator]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Copy env file
+        run: cp /home/jeevan/.secrets/agent-orchestrator.env.production .env
+
+      - name: Build and restart
+        run: docker compose up -d --build

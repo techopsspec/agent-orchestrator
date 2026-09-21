@@ -1,0 +1,21 @@
+# On-prem deployment, its own VM — same pattern as the self-hosted vLLM box
+# (ai-infra-lab). Operator-Portal reaches this service over the LAN via its
+# plain ORCHESTRATOR_BASE_URL env var (http://<this VM's IP>:8100), not
+# through a Docker network or a Cloudflare Tunnel, since nothing outside the
+# LAN calls this service directly. Copy .env.example to .env and fill it in.
+#
+#   docker compose up -d --build
+#
+services:
+  orchestrator:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8100:8100"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
