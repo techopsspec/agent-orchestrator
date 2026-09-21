@@ -108,6 +108,11 @@ async def stream_turn(app_module: ModuleType, request: RunTurnRequest) -> AsyncI
                             {
                                 "role": "assistant",
                                 "content": _clean_content(m.content),
+                                # Only the primary vLLM model is wrapped with
+                                # ReasoningPreservingChatOpenAI (see apps/operator_portal.py) --
+                                # the OpenAI/Gemini fallbacks never populate this key, so it's
+                                # None for them, same as any other reasoning-less turn.
+                                "reasoning_content": m.additional_kwargs.get("reasoning_content"),
                                 "tool_calls": [
                                     {"id": tc["id"], "name": tc["name"], "arguments": tc["args"]}
                                     for tc in (m.tool_calls or [])

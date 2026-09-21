@@ -10,6 +10,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import ChatOpenAI
 
 from agent_orchestrator.config import settings
+from agent_orchestrator.reasoning import ReasoningPreservingChatOpenAI
 
 SYSTEM_PROMPT = (
     "You are the Operator Portal chat assistant for Andrews Lawn & Snow, a lawn-care and "
@@ -58,7 +59,7 @@ async def build_agent(identity_token: str, model_overrides: dict | None = None):
     )
     tools = await client.get_tools()
 
-    primary_model = ChatOpenAI(
+    primary_model = ReasoningPreservingChatOpenAI(
         base_url=settings.vllm_base_url,
         api_key=settings.vllm_api_key or "unused",
         model=vllm_model_name,
