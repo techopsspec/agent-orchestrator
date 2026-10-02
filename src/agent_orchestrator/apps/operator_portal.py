@@ -3,12 +3,20 @@ one; onboarding a future app means adding a sibling module here plus a registry 
 (apps/registry.py), not touching graph/model/tool-loop code (see the orchestration-layer plan,
 "Onboarding a future second application")."""
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from deepagents import create_deep_agent
+from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 from langchain.agents.middleware import ModelFallbackMiddleware, ToolCallLimitMiddleware
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import ChatOpenAI
 
+from agent_orchestrator.apps.write_confirmation import (
+    WRITE_TOOLS,
+    WriteConfirmationMiddleware,
+)
 from agent_orchestrator.config import settings
 from agent_orchestrator.reasoning import ReasoningPreservingChatOpenAI
 
@@ -17,8 +25,34 @@ SYSTEM_PROMPT = (
     "snow-removal field service company. You help staff report and look up snowfall readings, "
     "and check what a snow visit at an address would be paid. Use the available tools rather "
     "than guessing at data you could look up. If a tool returns an error, tell the user what "
-    "went wrong instead of silently retrying the same call unchanged."
+    "went wrong instead of silently retrying the same call unchanged.\n\n"
+    "Recording a snowfall reading changes real operator pay, so never record one in the same "
+    "reply the user asked in. First reply with one short message that states the zone name, "
+    "the inches, and the date as YYYY-MM-DD with its weekday, and ask the user to reply yes. "
+    "Only call report_snowfall_reading after they say yes, using exactly those values. If "
+    "anything is missing or unclear (zone, inches, or date), ask instead of guessing."
 )
+
+# The company works in Central time; every date the user says ("today", "yesterday", "last
+# night") is a Central-time date.
+BUSINESS_TZ = ZoneInfo("America/Chicago")
+
+
+def system_prompt(now: datetime | None = None) -> str:
+    """SYSTEM_PROMPT plus today's date. Without it the model has no idea what day it is and
+    resolves "today"/"tomorrow" by guessing from dates earlier in the conversation -- testing on
+    2026-10-02 recorded "tomorrow" as 2026-10-16. Built per turn (build_agent runs once per
+    turn), so the date is always current."""
+    today = (now or datetime.now(BUSINESS_TZ)).astimezone(BUSINESS_TZ).date()
+    yesterday, tomorrow = today - timedelta(days=1), today + timedelta(days=1)
+    return (
+        f"{SYSTEM_PROMPT}\n\n"
+        f"Today is {today:%A}, {today.isoformat()} (Central time). "
+        f"Yesterday was {yesterday:%A}, {yesterday.isoformat()}. "
+        f"Tomorrow is {tomorrow:%A}, {tomorrow.isoformat()}. "
+        "Resolve every relative date the user gives (today, yesterday, last night, Monday) "
+        "against this, never against dates mentioned earlier in the conversation."
+    )
 
 # Ruby's Chat::TurnHandler capped a turn at 5 model calls (MAX_TOOL_ROUNDTRIPS); this is that
 # same cap, expressed as "at most 5 tool-calling rounds," with a graceful terminal message
@@ -85,10 +119,22 @@ async def build_agent(identity_token: str, model_overrides: dict | None = None):
         # limiter so a fallover on round 1 doesn't itself count against the round budget.
         middleware.insert(0, ModelFallbackMiddleware(*fallback_models))
 
-    agent = create_deep_agent(
-        model=primary_model,
-        tools=tools,
-        system_prompt=SYSTEM_PROMPT,
-        middleware=middleware,
-    )
+    agent = make_agent(primary_model, tools, middleware)
     return agent, provider_map
+
+
+def make_agent(model, tools, middleware):
+    """The deep agent itself, split out of build_agent so tests can build it with a scripted
+    model and fake tools and exercise the real wiring (guard + subagent override)."""
+    return create_deep_agent(
+        model=model,
+        tools=tools,
+        system_prompt=system_prompt(),
+        # First, so it wraps every tool call -- including one the fallback model makes.
+        middleware=[WriteConfirmationMiddleware(), *middleware],
+        # deepagents' default general-purpose subagent (reached via its `task` tool) gets every
+        # tool but none of our middleware -- it would be a way around WriteConfirmationMiddleware.
+        # Same subagent, minus the write tools, so a write can only happen in the main agent,
+        # where the confirmation guard runs.
+        subagents=[{**GENERAL_PURPOSE_SUBAGENT, "tools": [t for t in tools if t.name not in WRITE_TOOLS]}],
+    )
