@@ -60,7 +60,7 @@ def system_prompt(now: datetime | None = None) -> str:
 MAX_TOOL_ROUNDTRIPS = 5
 
 
-async def build_agent(identity_token: str, model_overrides: dict | None = None):
+async def build_agent(identity_token: str, model_overrides: dict | None = None, locale: str | None = None):
     """Builds a fresh deep agent for one turn, plus a {model_name: provider_label} map so the
     caller can label which provider actually answered (Rails persists this as
     ChatMessage#provider_used, same as Integrations::Llm today).
@@ -73,6 +73,9 @@ async def build_agent(identity_token: str, model_overrides: dict | None = None):
     configurable, e.g. via the Settings page) -- never credentials or base URLs, which stay
     orchestrator-owned deployment facts. A missing/blank override falls back to this
     orchestrator's own env-configured default, mirroring LlmSettings' own `.presence ||` pattern.
+
+    locale is accepted for the registry's common signature (apps/recruiting_sms.py uses it) and
+    ignored here: the staff chat is English-only today.
     """
     model_overrides = model_overrides or {}
     vllm_model_name = model_overrides.get("vllm_model") or settings.vllm_model
