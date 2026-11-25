@@ -37,3 +37,5 @@ class RunTurnRequest(BaseModel):
     messages: list[MessageIn]
     identity_token: str
     model_overrides: ModelOverrides = Field(default_factory=ModelOverrides)
+    # Language the reply must be in ("en" | "es"). Optional; apps that don't use it ignore it.
+    locale: str | None = None

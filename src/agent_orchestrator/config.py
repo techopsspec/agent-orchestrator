@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     rails_mcp_url: str
     mcp_shared_secret: str
 
+    # Operator-Portal's recruiting MCP server (Api::V1::RecruitingMcpController), used by
+    # apps/recruiting_sms.py. Optional so deployments without the SMS bot still boot.
+    rails_recruiting_mcp_url: str | None = None
+
     # Static shared secret proving an inbound /v1/turns call actually came from Rails.
     # Same trust model as mcp_shared_secret (one trusted service-to-service caller, short-lived
     # per-request use) -- no expiry/JWT needed for the same reason MCP_SHARED_SECRET doesn't

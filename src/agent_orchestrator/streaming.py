@@ -70,6 +70,7 @@ async def stream_turn(app_module: ModuleType, request: RunTurnRequest) -> AsyncI
         agent, provider_map = await app_module.build_agent(
             identity_token=request.identity_token,
             model_overrides=request.model_overrides.model_dump(exclude_none=True),
+            locale=request.locale,
         )
     except* httpx.HTTPStatusError as eg:
         # The MCP client's transport runs inside an anyio task group, so a 401 from Rails'
